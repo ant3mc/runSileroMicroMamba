@@ -4,47 +4,55 @@ import numpy as np
 import wave
 import tkinter as tk
 import unicodedata
-import html
+# import html  # не используется
 
 # ===== НАСТРОЙКИ =====
-voice = 'kseniya'          # голос
+voice = 'kseniya'
 sample_rate = 48000
-max_chunk_chars = 350      # макс. символов в одном фрагменте
-speed = 'x-slow'             # скорость речи: 'x-slow', 'slow', 'medium', 'fast', 'x-fast'
+max_chunk_chars = 300
+speed = 'x-slow'
 
-# ===== ФУНКЦИЯ ЗАМЕНЫ ЦИФР НА СЛОВА =====
+# ===== ЗАМЕНА ЦИФР НА СЛОВА =====
 def replace_digits_with_words(text: str) -> str:
     digit_map = {
-        '0': ' ноль ',
-        '1': ' один ',
-        '2': ' два ',
-        '3': ' три ',
-        '4': ' четыре ',
-        '5': ' пять ',
-        '6': ' шесть ',
-        '7': ' семь ',
-        '8': ' восемь ',
-        '9': ' девять '
+        '0': ' ноль ', '1': ' один ', '2': ' два ', '3': ' три ',
+        '4': ' четыре ', '5': ' пять ', '6': ' шесть ', '7': ' семь ',
+        '8': ' восемь ', '9': ' девять '
     }
-    result = []
-    for ch in text:
-        if ch in digit_map:
-            result.append(digit_map[ch])
-        else:
-            result.append(ch)
-    return ''.join(result)
+    return ''.join(digit_map.get(ch, ch) for ch in text)
 
-# ===== ОБНОВЛЁННАЯ ФУНКЦИЯ ЗАМЕНЫ ЛАТИНСКИХ БУКВ =====
+# ===== ЗАМЕНА IPA-СИМВОЛОВ =====
+def replace_ipa_symbols(text: str) -> str:
+    text = text.replace('iː', ' и-долгий ')
+    text = text.replace('i:', ' и-долгий ')
+    text = text.replace('uː', ' у-долгий ')
+    text = text.replace('u:', ' у-долгий ')
+    ipa_map = {
+        'ɪ': ' и-краткий ',
+        'ʊ': ' у-краткий ',
+        'ɛ': ' э ',
+        'ə': ' э ',
+        'ʌ': ' а ',
+        'ɑ': ' а ',
+        'ɔ': ' о ',
+        'ʃ': ' ш ',
+        'ʒ': ' ж ',
+        'θ': ' с ',
+        'ð': ' з ',
+        'ŋ': ' н ',
+        'ː': '',
+    }
+    return ''.join(ipa_map.get(ch, ch) for ch in text)
+
+# ===== ЗАМЕНА ЛАТИНСКИХ БУКВ =====
 def replace_latin_letters(text: str) -> str:
-    # Таблица для строчных букв и для заглавных, после которых идёт строчная латинская
     latin_map_lower = {
         'a': 'а', 'b': 'б', 'c': 'ч', 'd': 'д', 'e': 'э',
         'f': 'ф', 'g': 'г', 'h': 'х', 'i': 'и', 'j': 'дж',
         'k': 'к', 'l': 'л', 'm': 'м', 'n': 'н', 'o': 'о',
         'p': 'п', 'q': 'к', 'r': 'р', 's': 'с', 't': 'т',
-        'u': 'у', 'v': 'в', 'w': 'в', 'x': 'кс', 'y': 'ы', 'z': 'з'
+        'u': 'у', 'v': 'в', 'w': 'в', 'x': 'кс', 'y': 'й', 'z': 'з'
     }
-    # Таблица для заглавных букв (английские названия) — все остальные случаи
     latin_map_upper_name = {
         'A': ' Эй ', 'B': ' Би ', 'C': ' Си ', 'D': ' Ди ', 'E': ' И ',
         'F': ' Эф ', 'G': ' Джи ', 'H': ' Эйч ', 'I': ' Ай ', 'J': ' Джей ',
@@ -52,39 +60,26 @@ def replace_latin_letters(text: str) -> str:
         'P': ' Пи ', 'Q': ' Кью ', 'R': ' Ар ', 'S': ' Эс ', 'T': ' Ти ',
         'U': ' Ю ', 'V': ' Ви ', 'W': ' Дабл-Ю ', 'X': ' Экс ', 'Y': ' Уай ', 'Z': ' Зед '
     }
-
     result = []
     i = 0
     length = len(text)
     while i < length:
         ch = text[i]
-
         if 'a' <= ch <= 'z':
-            # Строчная латинская — старая таблица
             result.append(latin_map_lower.get(ch, ch))
-
         elif 'A' <= ch <= 'Z':
-            # Заглавная латинская — проверяем следующий символ
-            next_is_lower_latin = False
-            if i + 1 < length and 'a' <= text[i + 1] <= 'z':
-                next_is_lower_latin = True
-
+            next_is_lower_latin = (i + 1 < length and 'a' <= text[i + 1] <= 'z')
             if next_is_lower_latin:
-                # Сразу после заглавной идёт строчная латинская → старая таблица
                 result.append(latin_map_lower.get(ch.lower(), ch))
             else:
-                # Во всех остальных случаях → новая таблица (английское название)
                 result.append(latin_map_upper_name.get(ch, ch))
         else:
             result.append(ch)
-
         i += 1
-
     return ''.join(result)
 
-# ===== ФУНКЦИЯ ЗАМЕНЫ ГРЕЧЕСКИХ БУКВ =====
+# ===== ЗАМЕНА ГРЕЧЕСКИХ БУКВ =====
 def replace_greek_letters(text: str) -> str:
-    # Замена пробелов между двумя греческими буквами на ","
     text = re.sub(r'([\u0370-\u03FF]) +([\u0370-\u03FF])', r'\1,\2', text)
     greek_map = {
         'α': ' альфа ', 'β': ' бета ', 'γ': ' гамма ', 'δ': ' дельта ',
@@ -95,81 +90,69 @@ def replace_greek_letters(text: str) -> str:
         'υ': ' ипсилон ', 'φ': ' фи ', 'χ': ' хи ', 'ψ': ' пси ',
         'ω': ' омега '
     }
-    result = []
-    for ch in text:
-        lower_ch = ch.lower()
-        if lower_ch in greek_map:
-            result.append(greek_map[lower_ch])
-        else:
-            result.append(ch)
-    return ''.join(result)
+    return ''.join(greek_map.get(ch.lower(), ch) for ch in text)
 
-# ===== ФУНКЦИЯ ЗАМЕНЫ СКОБОК И КАВЫЧЕК НА ";" =====
+# ===== СКОБКИ И КАВЫЧКИ → ";" =====
 def replace_brackets_and_quotes(text: str) -> str:
-    brackets_and_quotes = r'[()[]{}<>"\'«»„“`‛]'
-    return re.sub(brackets_and_quotes, ';', text)
+    return re.sub(r'[\(\)\[\]\{\}<>"\'«»„“`‛]', ';', text)
 
-# ===== ЗАМЕНА ПРОЧИХ НЕДОПУСТИМЫХ СИМВОЛОВ НА ПРОБЕЛ =====
+# ===== ПРОЧИЕ НЕДОПУСТИМЫЕ → ПРОБЕЛ =====
 def replace_other_symbols(text: str) -> str:
-    allowed = r'[^\w.,!?;:-\—–]'
-    result = re.sub(allowed, ' ', text)
-    return result
+    return re.sub(r'[^\w.,!?;:-\—–]', ' ', text)
 
-# ===== УДАЛЕНИЕ УПРАВЛЯЮЩИХ СИМВОЛОВ =====
+# ===== УПРАВЛЯЮЩИЕ СИМВОЛЫ =====
 def remove_control_characters(text: str) -> str:
     control_chars = ''.join(chr(c) for c in range(32) if c not in (9, 10, 13))
     control_chars += chr(127)
-    pattern = '[' + re.escape(control_chars) + ']'
-    return re.sub(pattern, '', text)
+    return re.sub('[' + re.escape(control_chars) + ']', '', text)
 
-# ===== УДАЛЕНИЕ ДИАКРИТИКИ =====
+# ===== ДИАКРИТИКА =====
 def remove_diacritics(text: str) -> str:
     nfkd = unicodedata.normalize('NFKD', text)
     without_diacritics = ''.join(ch for ch in nfkd if not unicodedata.combining(ch))
-    without_diacritics = without_diacritics.replace('ß', 'ss')
-    return without_diacritics
+    return without_diacritics.replace('ß', 'ss')
 
-# ===== ЖЁСТКАЯ ОЧИСТКА (БЕЛЫЙ СПИСОК) =====
+# ===== ЖЁСТКАЯ ОЧИСТКА =====
 def ultimate_clean(text: str) -> str:
-    """
-    Оставляет только:
-    - русские буквы (включая Ё)
-    - латинские буквы A-Z a-z
-    - цифры
-    - пробельные символы (пробел, \n, \r, \t)
-    - знаки препинания: . , ! ? ; : - — – (дефис и тире)
-    Всё остальное заменяет на пробел.
-    """
     allowed = r'[^а-яА-ЯёЁa-zA-Z0-9\s.,!?;:-\—–]'
     cleaned = re.sub(allowed, ' ', text)
-    # Сжимаем множественные пробелы
     cleaned = re.sub(r'\s+', ' ', cleaned)
     return cleaned.strip()
 
-# ===== НОРМАЛИЗАЦИЯ ПОСЛЕДОВАТЕЛЬНОСТЕЙ =====
-def normalize_semicolons(text: str) -> str:
-    return re.sub(r';{2,}', ';', text)
+# ===== НОРМАЛИЗАЦИЯ =====
+def normalize_semicolons(text): return re.sub(r';{2,}', ';', text)
 
-def normalize_dots(text: str) -> str:
-    return re.sub(r'\.{4,}', '...', text)
+def normalize_punctuation_runs(text: str) -> str:
+    """
+    Сворачивает цепочки из .,!? длиной >= 2 в один символ,
+    кроме '!?', '?!' и '...'.
+    """
+    exceptions = {'!?', '?!', '...'}
 
-def normalize_dashes(text: str) -> str:
-    text = re.sub(r'-{4,}', '---', text)
-    text = re.sub(r'–{4,}', '–––', text)
-    text = re.sub(r'—{4,}', '———', text)
-    return text
+    def repl(m):
+        s = m.group(0)
+        return s if s in exceptions else s[0]
 
-def normalize_newlines(text: str) -> str:
+    return re.sub(r'[.,!?]{2,}', repl, text)
+
+def normalize_dashes(text):
+    """
+    Любая цепочка из 2 и более дефисов подряд
+    (любого вида: ASCII '-', en-dash '–', em-dash '—')
+    превращается в одно тире '—'.
+    Одиночный дефис любого вида остаётся как есть.
+    """
+    return re.sub(r'[-–—]{2,}', '—', text)
+
+def normalize_newlines(text):
     text = text.replace('\r\n', '\n')
-    text = re.sub(r'\n{2,}', '.', text)
-    return text
+    return re.sub(r'\n{2,}', '.', text)
 
-def normalize_whitespace(text: str) -> str:
+def normalize_whitespace(text):
     text = re.sub(r'[ \t]+', ' ', text)
-    text = text.strip()
-    return text
+    return text.strip()
 
-# ===== ЧТЕНИЕ ИЗ БУФЕРА ОБМЕНА =====
+# ===== БУФЕР ОБМЕНА =====
 def get_text_from_clipboard():
     root = tk.Tk()
     root.withdraw()
@@ -180,6 +163,18 @@ def get_text_from_clipboard():
     root.destroy()
     return content
 
+# ===== ЭКРАНИРОВАНИЕ ДЛЯ SSML =====
+def escape_for_ssml(s: str) -> str:
+    return (s.replace('&', '&amp;')
+             .replace('<', '&lt;')
+             .replace('>', '&gt;'))
+
+# ===== АГРЕССИВНАЯ ОЧИСТКА ДЛЯ SSML =====
+def sanitize_for_ssml(s: str) -> str:
+    s = re.sub(r'[^а-яА-ЯёЁa-zA-Z0-9\s.,!?]', ' ', s)
+    s = re.sub(r'\s+', ' ', s)
+    return s.strip()
+
 # ===== ПОЛУЧЕНИЕ ТЕКСТА И ПРЕДОБРАБОТКА =====
 text = get_text_from_clipboard()
 if not text:
@@ -188,38 +183,26 @@ if not text:
     exit(1)
 
 original_text = text
-
-# 0. Удаляем управляющие символы
 text = remove_control_characters(text)
-# 1. Замена цифр на слова
+text = replace_ipa_symbols(text)
 text = replace_digits_with_words(text)
-# 2. Замена латинских букв (обновлённая)
 text = replace_latin_letters(text)
-# 2.1. Замена греческих букв
 text = replace_greek_letters(text)
-# 3. Замена скобок и кавычек на ";"
 text = replace_brackets_and_quotes(text)
-# 4. Удаление диакритики
 text = remove_diacritics(text)
-# 5. Замена прочих недопустимых символов на пробелы
 text = replace_other_symbols(text)
-# 6. ЖЁСТКАЯ ОЧИСТКА (белый список)
 text = ultimate_clean(text)
-# 7. Нормализация последовательностей
 text = normalize_semicolons(text)
-text = normalize_dots(text)
+text = normalize_punctuation_runs(text)
 text = normalize_dashes(text)
 text = normalize_newlines(text)
-# 8. Нормализация пробелов
 text = normalize_whitespace(text)
 
 print("Текст для озвучивания (первые 100 символов):")
 print(text[:100] + "..." if len(text) > 100 else text)
 print("-" * 40)
-if original_text != text:
-    print("Примечание: выполнена полная очистка текста (удалены управляющие символы, диакритика, оставлены только разрешённые символы).")
 
-# ===== ФУНКЦИИ РАЗБИЕНИЯ ТЕКСТА =====
+# ===== РАЗБИЕНИЕ НА ФРАГМЕНТЫ =====
 def split_long_sentence(sentence, max_chars):
     parts = []
     remaining = sentence
@@ -279,8 +262,7 @@ def split_text_into_chunks(text, max_chars):
             if current:
                 chunks.append(current.strip())
             current = ""
-            sub_sentences = split_long_sentence(sent, max_chars)
-            for sub in sub_sentences:
+            for sub in split_long_sentence(sent, max_chars):
                 if len(current) + len(sub) + 1 <= max_chars:
                     current += sub + "  "
                 else:
@@ -306,7 +288,7 @@ def save_wav(file_path, audio_np, sample_rate):
         wav.setframerate(sample_rate)
         wav.writeframes(audio_int16.tobytes())
 
-# ===== ОСНОВНАЯ ЛОГИКА СИНТЕЗА =====
+# ===== СИНТЕЗ =====
 print("Загрузка модели Silero...")
 device = torch.device('cpu')
 torch.set_num_threads(4)
@@ -318,15 +300,39 @@ model.to(device)
 
 print("Разбивка текста на фрагменты...")
 chunks = split_text_into_chunks(text, max_chunk_chars)
-print(f"Получено {len(chunks)} фрагментов (максимум {max_chunk_chars} символов каждый).")
+print(f"Получено {len(chunks)} фрагментов (максимум {max_chunk_chars} символов).")
 print(f"Скорость речи: {speed} (через SSML)")
 
 audio_parts = []
 for i, chunk in enumerate(chunks, 1):
     print(f"Синтез фрагмента {i}/{len(chunks)}...")
-    safe_chunk = html.escape(chunk)
-    ssml_text = f'<speak><prosody rate="{speed}">{safe_chunk}</prosody></speak>'
-    audio = model.apply_tts(ssml_text=ssml_text, speaker=voice, sample_rate=sample_rate)
+
+    attempts = [
+        ("обычный",
+         f'<speak><prosody rate="{speed}">{escape_for_ssml(chunk)}</prosody></speak>'),
+        ("агрессивно очищенный",
+         f'<speak><prosody rate="{speed}">{escape_for_ssml(sanitize_for_ssml(chunk))}</prosody></speak>'),
+    ]
+
+    audio = None
+    for attempt_idx, (label, ssml_text) in enumerate(attempts, 1):
+        print(f"  → попытка {attempt_idx} ({label}), ssml_text: {ssml_text[:200]!r}")
+        try:
+            audio = model.apply_tts(ssml_text=ssml_text,
+                                    speaker=voice,
+                                    sample_rate=sample_rate)
+            break
+        except Exception as e:
+            print(f"  ! попытка {attempt_idx} не удалась: "
+                  f"{type(e).__name__}: {e}")
+
+    if audio is None:
+        print(f"  !!! все SSML-попытки провалились, синтез без SSML "
+              f"(темп будет нормальным, не {speed})")
+        audio = model.apply_tts(text=chunk,
+                                speaker=voice,
+                                sample_rate=sample_rate)
+
     audio_parts.append(audio.cpu())
 
 print("Склейка аудио...")
