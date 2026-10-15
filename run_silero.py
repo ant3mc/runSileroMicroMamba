@@ -9,8 +9,8 @@ import unicodedata
 # ===== НАСТРОЙКИ =====
 voice = 'kseniya'
 sample_rate = 48000
-max_chunk_chars = 300
-speed = 'x-slow'
+max_chunk_chars = 400
+speed = 'slow'
 
 # ===== ЗАМЕНА ЦИФР НА СЛОВА =====
 def replace_digits_with_words(text: str) -> str:
