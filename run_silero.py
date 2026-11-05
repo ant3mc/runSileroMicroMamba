@@ -4,13 +4,13 @@ import numpy as np
 import wave
 import tkinter as tk
 import unicodedata
-# import html  # не используется
 
 # ===== НАСТРОЙКИ =====
 voice = 'kseniya'
 sample_rate = 48000
-max_chunk_chars = 400
-speed = 'slow'
+MIN_CHUNK_CHARS = 30
+MAX_CHUNK_CHARS = 300
+speed = 'x-slow'
 
 # ===== ЗАМЕНА ЦИФР НА СЛОВА =====
 def replace_digits_with_words(text: str) -> str:
@@ -21,6 +21,79 @@ def replace_digits_with_words(text: str) -> str:
     }
     return ''.join(digit_map.get(ch, ch) for ch in text)
 
+# ===== ЗАМЕНА НЕРУССКИХ КИРИЛЛИЧЕСКИХ БУКВ =====
+def replace_non_russian_cyrillic(text: str) -> str:
+    mapping = {
+        # украинский / белорусский
+        'ґ': 'г', 'Ґ': 'Г',
+        'є': 'е', 'Є': 'Е',
+        'і': 'и', 'І': 'И',
+        'ї': 'йи', 'Ї': 'Йи',
+        'ў': 'у', 'Ў': 'У',
+        # сербский / македонский
+        'ј': 'й', 'Ј': 'Й',
+        'љ': 'ль', 'Љ': 'Ль',
+        'њ': 'нь', 'Њ': 'Нь',
+        'ћ': 'ч', 'Ћ': 'Ч',
+        'ђ': 'дж', 'Ђ': 'Дж',
+        'џ': 'дж', 'Џ': 'Дж',
+        'ѓ': 'г', 'Ѓ': 'Г',
+        'ќ': 'к', 'Ќ': 'К',
+        'ѕ': 'дз', 'Ѕ': 'Дз',
+        # тюркские языки СНГ (казахский, киргизский, туркменский,
+        # азербайджанский, татарский, башкирский) и таджикский
+        'ә': 'а', 'Ә': 'А',
+        'ғ': 'г', 'Ғ': 'Г',
+        'қ': 'к', 'Қ': 'К',
+        'ң': 'нг', 'Ң': 'Нг',
+        'ө': 'о', 'Ө': 'О',
+        'ұ': 'у', 'Ұ': 'У',
+        'ү': 'у', 'Ү': 'У',
+        'һ': 'х', 'Һ': 'Х',
+        'җ': 'дж', 'Җ': 'Дж',
+        'ҳ': 'х', 'Ҳ': 'Х',
+        'ҷ': 'дж', 'Ҷ': 'Дж',
+        'ӣ': 'и', 'Ӣ': 'И',
+        'ӯ': 'у', 'Ӯ': 'У',
+        'ҙ': 'з', 'Ҙ': 'З',
+        'ҫ': 'с', 'Ҫ': 'С',
+    }
+    return ''.join(mapping.get(ch, ch) for ch in text)
+
+# ===== ЗАМЕНА КИРИЛЛИЧЕСКИХ АББРЕВИАТУР =====
+def replace_cyrillic_abbreviations(text: str) -> str:
+    name_map = {
+        'А': 'а', 'Б': 'бэ', 'В': 'вэ', 'Г': 'гэ', 'Д': 'дэ',
+        'Е': 'е', 'Ё': 'ё', 'Ж': 'жэ', 'З': 'зэ', 'И': 'и',
+        'Й': 'и краткое', 'К': 'ка', 'Л': 'эл', 'М': 'эм',
+        'Н': 'эн', 'О': 'о', 'П': 'пэ', 'Р': 'эр', 'С': 'эс',
+        'Т': 'тэ', 'У': 'у', 'Ф': 'эф', 'Х': 'ха', 'Ц': 'цэ',
+        'Ч': 'че', 'Ш': 'ша', 'Щ': 'ща', 'Ъ': 'твёрдый знак',
+        'Ы': 'ы', 'Ь': 'мягкий знак', 'Э': 'э', 'Ю': 'ю', 'Я': 'я'
+    }
+    def is_upper_cyr(ch): return ('А' <= ch <= 'Я') or ch == 'Ё'
+
+    result = []
+    i, length = 0, len(text)
+    while i < length:
+        ch = text[i]
+        if is_upper_cyr(ch):
+            j = i
+            while j < length and is_upper_cyr(text[j]):
+                j += 1
+            run_len = j - i
+            if run_len >= 2:
+                for k in range(i, j):
+                    result.append(' ' + name_map.get(text[k], text[k]) + ' ')
+                i = j
+                continue
+            result.append(ch)
+            i += 1
+            continue
+        result.append(ch)
+        i += 1
+    return ''.join(result)
+
 # ===== ЗАМЕНА IPA-СИМВОЛОВ =====
 def replace_ipa_symbols(text: str) -> str:
     text = text.replace('iː', ' и-долгий ')
@@ -28,19 +101,10 @@ def replace_ipa_symbols(text: str) -> str:
     text = text.replace('uː', ' у-долгий ')
     text = text.replace('u:', ' у-долгий ')
     ipa_map = {
-        'ɪ': ' и-краткий ',
-        'ʊ': ' у-краткий ',
-        'ɛ': ' э ',
-        'ə': ' э ',
-        'ʌ': ' а ',
-        'ɑ': ' а ',
-        'ɔ': ' о ',
-        'ʃ': ' ш ',
-        'ʒ': ' ж ',
-        'θ': ' с ',
-        'ð': ' з ',
-        'ŋ': ' н ',
-        'ː': '',
+        'ɪ': ' и-краткий ', 'ʊ': ' у-краткий ', 'ɛ': ' э ',
+        'ə': ' э ', 'ʌ': ' а ', 'ɑ': ' а ', 'ɔ': ' о ',
+        'ʃ': ' ш ', 'ʒ': ' ж ', 'θ': ' с ', 'ð': ' з ',
+        'ŋ': ' н ', 'ː': '',
     }
     return ''.join(ipa_map.get(ch, ch) for ch in text)
 
@@ -61,8 +125,7 @@ def replace_latin_letters(text: str) -> str:
         'U': ' Ю ', 'V': ' Ви ', 'W': ' Дабл-Ю ', 'X': ' Экс ', 'Y': ' Уай ', 'Z': ' Зед '
     }
     result = []
-    i = 0
-    length = len(text)
+    i, length = 0, len(text)
     while i < length:
         ch = text[i]
         if 'a' <= ch <= 'z':
@@ -106,11 +169,15 @@ def remove_control_characters(text: str) -> str:
     control_chars += chr(127)
     return re.sub('[' + re.escape(control_chars) + ']', '', text)
 
-# ===== ДИАКРИТИКА =====
+# ===== ДИАКРИТИКА (только для не-русских символов) =====
 def remove_diacritics(text: str) -> str:
-    nfkd = unicodedata.normalize('NFKD', text)
-    without_diacritics = ''.join(ch for ch in nfkd if not unicodedata.combining(ch))
-    return without_diacritics.replace('ß', 'ss')
+    def process(ch: str) -> str:
+        if ch in 'ёЁ' or 'а' <= ch.lower() <= 'я':
+            return ch
+        nfkd = unicodedata.normalize('NFKD', ch)
+        stripped = ''.join(c for c in nfkd if not unicodedata.combining(c))
+        return stripped.replace('ß', 'ss')
+    return ''.join(process(ch) for ch in text)
 
 # ===== ЖЁСТКАЯ ОЧИСТКА =====
 def ultimate_clean(text: str) -> str:
@@ -123,25 +190,13 @@ def ultimate_clean(text: str) -> str:
 def normalize_semicolons(text): return re.sub(r';{2,}', ';', text)
 
 def normalize_punctuation_runs(text: str) -> str:
-    """
-    Сворачивает цепочки из .,!? длиной >= 2 в один символ,
-    кроме '!?', '?!' и '...'.
-    """
     exceptions = {'!?', '?!', '...'}
-
     def repl(m):
         s = m.group(0)
         return s if s in exceptions else s[0]
-
     return re.sub(r'[.,!?]{2,}', repl, text)
 
 def normalize_dashes(text):
-    """
-    Любая цепочка из 2 и более дефисов подряд
-    (любого вида: ASCII '-', en-dash '–', em-dash '—')
-    превращается в одно тире '—'.
-    Одиночный дефис любого вида остаётся как есть.
-    """
     return re.sub(r'[-–—]{2,}', '—', text)
 
 def normalize_newlines(text):
@@ -184,12 +239,14 @@ if not text:
 
 original_text = text
 text = remove_control_characters(text)
+text = replace_non_russian_cyrillic(text)    # ← до remove_diacritics!
+text = remove_diacritics(text)
 text = replace_ipa_symbols(text)
 text = replace_digits_with_words(text)
+text = replace_cyrillic_abbreviations(text)
 text = replace_latin_letters(text)
 text = replace_greek_letters(text)
 text = replace_brackets_and_quotes(text)
-text = remove_diacritics(text)
 text = replace_other_symbols(text)
 text = ultimate_clean(text)
 text = normalize_semicolons(text)
@@ -202,82 +259,105 @@ print("Текст для озвучивания (первые 100 символо
 print(text[:100] + "..." if len(text) > 100 else text)
 print("-" * 40)
 
-# ===== РАЗБИЕНИЕ НА ФРАГМЕНТЫ =====
-def split_long_sentence(sentence, max_chars):
-    parts = []
-    remaining = sentence
-    while len(remaining) > max_chars:
-        split_pos = -1
-        for i in range(max_chars - 1, -1, -1):
-            if i < len(remaining) and remaining[i] in (' ', ',', '_'):
-                split_pos = i + 1
-                break
-        if split_pos == -1:
-            split_pos = max_chars
-        part = remaining[:split_pos].strip()
-        if part:
-            parts.append(part)
-        remaining = remaining[split_pos:].strip()
-    if remaining:
-        parts.append(remaining)
-    return parts
+# ===== РАЗБИЕНИЕ НА ФРАГМЕНТЫ (оконный алгоритм) =====
+def split_text_into_chunks(text, min_chars, max_chars):
+    """
+    Непрерывное разбиение текста на чанки по окну.
 
-def split_sentences(text):
-    sentences = []
-    start = 0
-    i = 0
-    length = len(text)
-    while i < length:
-        if text[i] in '.!?':
-            if i + 1 < length:
-                next_char = text[i+1]
-                if next_char == ' ':
-                    sentences.append(text[start:i+1].strip())
-                    start = i+2
-                    i += 2
-                    continue
-                j = i+1
-                while j < length and (text[j].isalpha() or text[j].isdigit() or text[j] in '-–'):
-                    j += 1
-                if j > i+1 and (text[i+1].isupper() or text[i+1].isdigit()):
-                    if j < length and text[j-1] == '.':
-                        i += 1
-                        continue
-                    else:
-                        sentences.append(text[start:i+1].strip())
-                        start = i+1
-                        i += 1
-                        continue
-        i += 1
-    if start < length:
-        sentences.append(text[start:].strip())
-    return [s for s in sentences if s]
+    Окно поиска разделителя: [start + min_chars, start + max_chars]
+    включительно. Разделитель можно выбирать ровно на нижней границе окна.
 
-def split_text_into_chunks(text, max_chars):
-    sentences = split_sentences(text)
+    Если до конца текста осталось <= min_chars — весь остаток текста
+    становится последним чанком.
+    Если осталось < max_chars — окно идёт до конца текста.
+    Иначе окно идёт от start + min_chars до start + max_chars включительно.
+
+    Приоритеты разделителей (поиск от конца окна к началу):
+      1) . ! ?   (непрерывная серия таких символов считается одним
+                  разделителем, поэтому "..." не разрезается)
+      2) ; :
+      3) ,
+      4) пробел / перенос строки
+
+    Знаки препинания включаются в текущий чанк.
+    Пробел / перенос строки в текущий чанк не включаются — они
+    становятся ведущими символами следующего чанка.
+    Если разделитель не найден — принудительная резка по верхней границе
+    окна, при этом символ на верхней границе входит в текущий чанк.
+    Закрывающая фигурная скобка разделителем не считается.
+    """
     chunks = []
-    current = ""
-    for sent in sentences:
-        if len(sent) > max_chars:
-            if current:
-                chunks.append(current.strip())
-            current = ""
-            for sub in split_long_sentence(sent, max_chars):
-                if len(current) + len(sub) + 1 <= max_chars:
-                    current += sub + "  "
-                else:
-                    if current:
-                        chunks.append(current.strip())
-                    current = sub + "  "
+    start = 0
+    n = len(text)
+
+    level1 = '.!?'
+    level2 = ';:'
+    level3 = ','
+    level4 = ' \n\r\t'
+
+    while start < n:
+        remaining = n - start
+
+        # Остаток не больше минимума — это последний чанк
+        if remaining <= min_chars:
+            chunks.append(text[start:])
+            break
+
+        # Границы окна поиска (включительно)
+        win_lo = start + min_chars
+        win_hi = min(start + max_chars, n - 1)
+
+        split_pos = None
+        split_is_whitespace = False
+
+        # Уровень 1: . ! ?  (серия подряд идущих — один разделитель)
+        for i in range(win_hi, win_lo - 1, -1):
+            if text[i] in level1:
+                j = i
+                while j + 1 < n and text[j + 1] in level1:
+                    j += 1
+                split_pos = j
+                split_is_whitespace = False
+                break
+
+        # Уровень 2: ; :
+        if split_pos is None:
+            for i in range(win_hi, win_lo - 1, -1):
+                if text[i] in level2:
+                    split_pos = i
+                    split_is_whitespace = False
+                    break
+
+        # Уровень 3: ,
+        if split_pos is None:
+            for i in range(win_hi, win_lo - 1, -1):
+                if text[i] in level3:
+                    split_pos = i
+                    split_is_whitespace = False
+                    break
+
+        # Уровень 4: пробел / перенос строки
+        if split_pos is None:
+            for i in range(win_hi, win_lo - 1, -1):
+                if text[i] in level4:
+                    split_pos = i
+                    split_is_whitespace = True
+                    break
+
+        if split_pos is None:
+            # Принудительная резка: верхняя граница окна входит в чанк
+            chunks.append(text[start:win_hi + 1])
+            start = win_hi + 1
+        elif split_is_whitespace:
+            # Пробел/перенос не включаем в текущий чанк
+            chunks.append(text[start:split_pos])
+            # Пробел станет ведущим символом следующего чанка
+            start = split_pos
         else:
-            if len(current) + len(sent) + 1 <= max_chars:
-                current += sent + "  "
-            else:
-                if current:
-                    chunks.append(current.strip())
-                current = sent + "  "
-    if current:
-        chunks.append(current.strip())
+            # Знак препинания включаем в текущий чанк
+            chunks.append(text[start:split_pos + 1])
+            start = split_pos + 1
+
     return chunks
 
 def save_wav(file_path, audio_np, sample_rate):
@@ -299,8 +379,9 @@ model, _ = torch.hub.load(repo_or_dir='snakers4/silero-models',
 model.to(device)
 
 print("Разбивка текста на фрагменты...")
-chunks = split_text_into_chunks(text, max_chunk_chars)
-print(f"Получено {len(chunks)} фрагментов (максимум {max_chunk_chars} символов).")
+chunks = split_text_into_chunks(text, MIN_CHUNK_CHARS, MAX_CHUNK_CHARS)
+print(f"Получено {len(chunks)} фрагментов "
+      f"(минимум {MIN_CHUNK_CHARS}, максимум {MAX_CHUNK_CHARS} символов).")
 print(f"Скорость речи: {speed} (через SSML)")
 
 audio_parts = []
