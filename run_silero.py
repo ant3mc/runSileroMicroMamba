@@ -155,10 +155,6 @@ def replace_greek_letters(text: str) -> str:
     }
     return ''.join(greek_map.get(ch.lower(), ch) for ch in text)
 
-# ===== СКОБКИ И КАВЫЧКИ → ";" =====
-def replace_brackets_and_quotes(text: str) -> str:
-    return re.sub(r'[\(\)\[\]\{\}<>"\'«»„“`‛]', ';', text)
-
 # ===== ПРОЧИЕ НЕДОПУСТИМЫЕ → ПРОБЕЛ =====
 def replace_other_symbols(text: str) -> str:
     return re.sub(r'[^\w.,!?;:-\—–]', ' ', text)
@@ -246,7 +242,6 @@ text = replace_digits_with_words(text)
 text = replace_cyrillic_abbreviations(text)
 text = replace_latin_letters(text)
 text = replace_greek_letters(text)
-text = replace_brackets_and_quotes(text)
 text = replace_other_symbols(text)
 text = ultimate_clean(text)
 text = normalize_semicolons(text)
